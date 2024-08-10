@@ -198,7 +198,7 @@ async def check_task_status(task_id: str):
     return current_task
         
 @app.get("/task-result/{task_id}", dependencies=[Depends(get_current_user)])
-async def wait_for_result(task_id: str, request: Request):
+async def wait_for_result(task_id: str):
     """
     Waits for the task to complete and returns the result file if successful.
     
