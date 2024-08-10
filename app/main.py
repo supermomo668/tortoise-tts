@@ -5,11 +5,11 @@ import asyncio
 import dotenv
 import logging
 import time
-from tenacity import retry, stop_after_delay, wait_fixed
+from tenacity import RetryError, retry, stop_after_delay, wait_fixed
 from datetime import timedelta
 
 import concurrent.futures
-from fastapi import FastAPI, Depends, HTTPException, status
+from fastapi import FastAPI, Depends, HTTPException, Request, requests, status
 from fastapi.responses import FileResponse, JSONResponse
 from contextlib import asynccontextmanager
 from beartype import beartype
@@ -44,7 +44,7 @@ logger = logging.getLogger(__name__)
 # Create the ThreadPoolExecutor with the determined number of max workers
 executor = concurrent.futures.ThreadPoolExecutor(
     max_workers=int(os.getenv("MAX_WORKERS", pick_max_worker())))
-TASK_TIMEOUT = int(os.getenv("TASK_TIMEOUT", 60*30))  # 30 minutes
+TASK_TIMEOUT = int(os.getenv("TASK_TIMEOUT", 60*3))  # 3  minutes
 
 # Dictionary to store task information
 tasks = {}
@@ -186,6 +186,17 @@ async def task_status(task_id: str):
         raise HTTPException(status_code=404, detail="Task not found")
     return task
 
+@retry(stop=stop_after_delay(TASK_TIMEOUT), wait=wait_fixed(5), reraise=True)
+async def check_task_status(task_id: str):
+    current_task = tasks.get(task_id)
+    if not current_task:
+        raise HTTPException(status_code=404, detail="Task not found")
+    if current_task["status"] == "failed":
+        raise HTTPException(status_code=500, detail=f"Task failed: {current_task.get('error', 'Unknown error')}")
+    if current_task["status"] != "completed":
+        raise Exception("Task not completed yet")  # Raise an exception to trigger a retry
+    return current_task
+        
 @app.get("/task-result/{task_id}", dependencies=[Depends(get_current_user)])
 async def wait_for_result(task_id: str):
     """
@@ -201,33 +212,17 @@ async def wait_for_result(task_id: str):
         HTTPException: If the task is not found, fails, or times out.
     """
     try:
-        task = tasks.get(task_id)
-        if not task:
-            raise HTTPException(status_code=404, detail="Task not found")
-
-        @retry(stop=stop_after_delay(TASK_TIMEOUT), wait=wait_fixed(5))
-        def check_task_status():
-            current_task = tasks.get(task_id)
-            if current_task["status"] == "failed":
-                raise HTTPException(status_code=500, detail=f"Task failed: {current_task.get('error', 'Unknown error')}")
-            elif current_task["status"] != "completed":
-                raise Exception("Task not completed yet")
-            return current_task
-
-        task = check_task_status()
-
+        task = await check_task_status(task_id)
         output_path = task["result"]
         if not os.path.isfile(output_path):
             raise HTTPException(status_code=404, detail=f"File not found: {output_path}")
-        
         return FileResponse(
             output_path, 
             filename=os.path.basename(output_path), 
             media_type="audio/wav"
         )
-
-    except HTTPException as e:
-        raise e
+    except RetryError:
+        raise HTTPException(status_code=408, detail="Task timed out")
     except Exception as e:
         raise HTTPException(status_code=500, detail=str(e))
     
