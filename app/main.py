@@ -114,6 +114,10 @@ async def home():
     return JSONResponse(content={
         "message": "Hello, FiCast-TTS! Check the docs at /docs."})
 
+@app.get("/ping")
+async def ping():
+    return {"status": "ok"}
+
 @app.post("/login")
 async def login(form_data: OAuth2PasswordRequestForm = Depends()):
     if verify_user(form_data.username, form_data.password):
