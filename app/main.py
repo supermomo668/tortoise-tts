@@ -5,6 +5,7 @@ import asyncio
 import dotenv
 import logging
 import time
+from tenacity import retry, stop_after_delay, wait_fixed
 from datetime import timedelta
 
 import concurrent.futures
@@ -183,29 +184,46 @@ async def task_status(task_id: str):
 
 @app.get("/task-result/{task_id}", dependencies=[Depends(get_current_user)])
 async def wait_for_result(task_id: str):
+    """
+    Waits for the task to complete and returns the result file if successful.
+    
+    Args:
+        task_id (str): The ID of the task to wait for.
+        
+    Returns:
+        FileResponse: The response containing the result file.
+    
+    Raises:
+        HTTPException: If the task is not found, fails, or times out.
+    """
     try:
         task = tasks.get(task_id)
         if not task:
             raise HTTPException(status_code=404, detail="Task not found")
-        start_time = time.time()
-        while task["status"] != "completed":
-            if task["status"] == "failed":
-                raise HTTPException(
-                    status_code=500, detail=f"Task failed: {task.get('error', 'Unknown error')}")
-            elif time.time() - start_time > TASK_TIMEOUT:
-                raise HTTPException(status_code=408, detail="Task did not complete within the timeout")
-            await asyncio.sleep(5)
-            task = tasks.get(task_id)
+
+        @retry(stop=stop_after_delay(TASK_TIMEOUT), wait=wait_fixed(5))
+        def check_task_status():
+            current_task = tasks.get(task_id)
+            if current_task["status"] == "failed":
+                raise HTTPException(status_code=500, detail=f"Task failed: {current_task.get('error', 'Unknown error')}")
+            elif current_task["status"] != "completed":
+                raise Exception("Task not completed yet")
+            return current_task
+
+        task = check_task_status()
 
         output_path = task["result"]
         if not os.path.isfile(output_path):
             raise HTTPException(status_code=404, detail=f"File not found: {output_path}")
-        # Expected output
+        
         return FileResponse(
             output_path, 
             filename=os.path.basename(output_path), 
-            media_type="audio/wav")
-    
+            media_type="audio/wav"
+        )
+
+    except HTTPException as e:
+        raise e
     except Exception as e:
         raise HTTPException(status_code=500, detail=str(e))
     
