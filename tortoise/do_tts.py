@@ -19,7 +19,7 @@ from tortoise.utils.audio import load_voices
 # Load logging configuration
 logger = logging.getLogger(__name__)
 
-def _initialized_tts(args):
+def _initialized_tts(args) -> TextToSpeech:
     tts = TextToSpeech(
         models_dir=args.model_dir, autoregressive_batch_size=args.autoregressive_batch_size, use_deepspeed=args.use_deepspeed, kv_cache=args.kv_cache, 
         half=args.half)

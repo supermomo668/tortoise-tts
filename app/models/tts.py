@@ -21,3 +21,10 @@ class TTSArgs(BaseModel):
     seed: int = None
     cvvp_amount: float = 0.0
     produce_debug_state: bool = True
+
+from pydantic import BaseModel
+
+class TTSResponse(BaseModel):
+    # Define the fields for the response model
+    task_id: str
+    status: str
