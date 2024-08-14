@@ -7,37 +7,14 @@ from fastapi.security import OAuth2PasswordRequestForm
 from fastapi.responses import FileResponse, JSONResponse
 from celery.result import AsyncResult
 
-from app.models import tts
-from tortoise.api import TextToSpeech
 from tortoise.utils.audio import BUILTIN_VOICES_DIR
 
 from app.models.request import TranscriptionRequest
-from app.models.tts import TTSArgs, TTSResponse
 from app.services.auth import get_current_user, verify_user, ACCESS_TOKEN_EXPIRE_MINUTES, create_access_token
 from app.celery import celery_app  # Import the Celery app
-from app.tasks import local_inference_tts  # Import the Celery task
+from app.lifespan import text_to_speech
 
-
-async def text_to_speech(request: TranscriptionRequest, tts: TextToSpeech):
-    try:
-        args = TTSArgs(
-            text=request.text,
-            voice=request.voice,
-            preset=request.preset
-        )
-        # Pass the tts object directly to the task
-        task_id = local_inference_tts.s(tts_args={'tts': tts, 'args': args}).apply_async()
-        return {"task_id": task_id.id, "status": "queued"}
-    except Exception as e:
-        raise HTTPException(status_code=500, detail=str(e))
-
-def register_routes(app: FastAPI):
-  async def get_tts(app: FastAPI = Depends()) -> TextToSpeech:
-    tts = app.state.tts
-    if tts is None:
-        raise HTTPException(status_code=503, detail="TTS service not initialized.")
-    return tts
-  
+def register_routes(app: FastAPI):  
   @app.get("/")
   async def home():
       return JSONResponse(content={
@@ -70,20 +47,9 @@ def register_routes(app: FastAPI):
   async def available_voices():
       return JSONResponse(content={"voices": os.listdir(BUILTIN_VOICES_DIR)})
 
-  @app.post("/tts", dependencies=[Depends(get_current_user)])  
-  async def text_to_speech(request: TranscriptionRequest, tts = Depends(get_tts)):
-      try:
-          args = TTSArgs(
-              text=request.text,
-              voice=request.voice,
-              preset=request.preset
-          )
-          # Pass the tts object directly to the task
-          task_id = local_inference_tts.s(tts_args={'tts': tts, 'args': args}).apply_async()
-          return {"task_id": task_id.id, "status": "queued"}
-      except Exception as e:
-          raise HTTPException(status_code=500, detail=str(e))
-
+  @app.post("/tts", response_model=None, dependencies=[Depends(get_current_user)])  
+  async def tts(request: TranscriptionRequest):
+      return await text_to_speech(request)
 
   @app.get("/queue-status", dependencies=[Depends(get_current_user)])
   async def queue_status():

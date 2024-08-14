@@ -8,6 +8,23 @@ Tortoise is a text-to-speech program built with the following priorities:
 This repo contains all the code needed to run Tortoise TTS in inference mode.
 
 Manuscript: https://arxiv.org/abs/2305.07243
+
+## System pre-req
+```
+sudo apt-get update
+# install or upgrade
+sudo apt-get upgrade ffmpeg
+```
+and other related deps:
+```
+sudo apt-get update
+sudo apt-get install libavutil-dev
+```
+which may require setting up sym link:
+```
+sudo ln -s /usr/lib/x86_64-linux-gnu/libavutil.so.56 /usr/lib/x86_64-linux-gnu/libavutil.so.57
+export LD_LIBRARY_PATH=/usr/local/lib:$LD_LIBRARY_PATH
+```
 ## Hugging Face space
 
 A live demo is hosted on Hugging Face Spaces. If you'd like to avoid a queue, please duplicate the Space and add a GPU. Please note that CPU-only spaces do not work for this demo.

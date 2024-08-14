@@ -21,8 +21,12 @@ logger = logging.getLogger(__name__)
 
 def _initialized_tts(args) -> TextToSpeech:
     tts = TextToSpeech(
-        models_dir=args.model_dir, autoregressive_batch_size=args.autoregressive_batch_size, use_deepspeed=args.use_deepspeed, kv_cache=args.kv_cache, 
-        half=args.half)
+        models_dir=args.model_dir, 
+        autoregressive_batch_size=args.autoregressive_batch_size, 
+        use_deepspeed=args.use_deepspeed, 
+        kv_cache=args.kv_cache, 
+        half=args.half
+    )
     return tts
 
 @lru_cache(maxsize=None)
@@ -31,7 +35,8 @@ def load_voices_cached(voices_tuple):
     return load_voices(voices_tuple)
 
 
-def infer_voice(tts: TextToSpeech, args: argparse.Namespace):
+def infer_voice(
+    tts: TextToSpeech, args: argparse.Namespace):
     selected_voices = args.voice.split(',')
     for k, selected_voice in tqdm(enumerate(selected_voices), desc="generating using selected voice"):
         if '&' in selected_voice:

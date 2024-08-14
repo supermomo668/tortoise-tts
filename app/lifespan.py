@@ -1,39 +1,45 @@
 # app/lifespan.py
 import os
 from contextlib import asynccontextmanager
-from fastapi import FastAPI
-from tortoise.api import TextToSpeech
-from tortoise.do_tts import _initialized_tts
+from fastapi import Depends, FastAPI, HTTPException
 from app.models.request import TranscriptionRequest
-from app.models.tts import TTSArgs
 from app.logger import logger
 
-from tortoise.api import TextToSpeech
-from app.routes import text_to_speech  # Ensure this import is correct based on the actual location
+from app.tasks import local_inference_tts, get_tts  # Import the Celery task
 
 # Environment-specific variable to skip initialization during testing
 IS_TESTING = os.getenv("TESTING", "False").lower() in ("true", "1")
+tts_instance = None
 
-async def post_initialization_event(tts: TextToSpeech):
+async def text_to_speech(
+    request: TranscriptionRequest):
     try:
-        request = TranscriptionRequest(
-            text="Initialized! World", 
-            voice="random", preset="ultra_fast"
-        )
-        response = await text_to_speech(request, tts)
-        logger.info(f"Initialized TTS: {response}")
+        # Pass the tts object directly to the task
+        task_id = local_inference_tts.s(
+            tts_args={'args': request.model_dump()}).apply_async()
+        return {"task_id": task_id.id, "status": "queued"}
     except Exception as e:
-        logger.info("Error during initialization TTS:", str(e))
+        raise HTTPException(status_code=500, detail=str(e))
 
 @asynccontextmanager
 async def lifespan(app: FastAPI):
+    # Initialize the TTS object when the application starts
+    tts_instance = get_tts()
     if not IS_TESTING:
         # Initialize the TTS object and store it in the app state
-        args = TTSArgs(text="TEST")
-        app.state.tts = _initialized_tts(args)
-        
-        # Pass the initialized TTS object to the post-initialization event
-        await post_initialization_event(app.state.tts)
+        logger.info(f"Initializing TTS model dependencies with mock call")
+        try:
+            request = TranscriptionRequest(
+                text="Initialized!", 
+                voice="random", preset="ultra_fast"
+            )
+            response = await text_to_speech(request)
+            if response and response.get('status') == 'success':
+                logger.info("Initialized TTS successfully.")
+            else:
+                logger.info(f"TTS initialization failed with response: {response}")
+        except Exception as e:
+            logger.info(f"Error during initialization TTS: {str(e)}")
     else:
         print(f"Skipping initialization due to TESTING={IS_TESTING}")
         app.state.tts = None  # No need to initialize TTS if testing
