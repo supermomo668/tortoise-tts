@@ -10,12 +10,16 @@ services:
       - "${FASTAPI_PORT:-42110}:${FASTAPI_PORT:-42110}"
     depends_on:
       - redis
+    env_file:
+      - .env
 
   redis:
     image: "redis:alpine"
     ports:
       - "${REDIS_PORT:-6379}:6379"
-
+    env_file:
+      - .env
+      
   celery_worker:
     build: .
     command: celery -A app.tasks worker --loglevel=${CELERY_LOGLEVEL:-info} --pool=${CELERY_POOL:-solo}
@@ -25,9 +29,11 @@ services:
       - redis
     environment:
       - C_FORCE_ROOT=true  # Use with caution, enables root user in Celery.
-      - CELERY_BROKER_URL=redis://redis:${REDIS_PORT:-6379}/0
-      - CELERY_RESULT_BACKEND=redis://redis:${REDIS_PORT:-6379}/0
-      - CELERY_CONCURRENCY=${CELERY_CONCURRENCY:-1}  # Default to 1 for solo mode, change as needed for production
+      - CELERY_BROKER_URL=redis://redis:${REDIS_PORT}/0
+      - CELERY_RESULT_BACKEND=redis://redis:${REDIS_PORT}/0
+      - CELERY_CONCURRENCY=${CELERY_CONCURRENCY}
+    env_file:
+      - .env
 
 networks:
   default:

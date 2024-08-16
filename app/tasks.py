@@ -35,7 +35,8 @@ def _process_tts_inference(tts_args: dict):
 if USE_CELERY:
     @celery_app.task(bind=True)
     def local_inference_tts(self, tts_args: dict):
-        return _process_tts_inference(tts_args)
+        audio_out = _process_tts_inference(tts_args)
+        return audio_out.getvalue()
 else:
     def local_inference_tts(tts_args: dict):
         return _process_tts_inference(tts_args)
