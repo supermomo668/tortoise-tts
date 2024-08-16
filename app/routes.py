@@ -28,14 +28,17 @@ if not USE_CELERY:
     )
     fifo_queue = asyncio.Queue()
     tasks: dict[str, Task] = {}
-    async def process_requests(tts):
+    async def process_requests():
         while True:
-            task_id, (args, future) = await fifo_queue.get()
+            task_id, future = await fifo_queue.get()
             task = tasks[task_id]
             try:
                 task.set_in_progress()
+                logger.info(f"Processing task {task_id}")
                 audio_out = await asyncio.get_event_loop().run_in_executor(
-                    executor, local_inference_tts, task.request)
+                    executor, local_inference_tts, 
+                    {"args": task.request.model_dump()}
+                )
                 task.set_completed(audio_out)
                 future.set_result(audio_out)
             except Exception as e:
@@ -43,9 +46,25 @@ if not USE_CELERY:
                 future.set_exception(e)
             finally:
                 fifo_queue.task_done()
-    asyncio.ensure_future(process_requests(get_tts()))
-    
-    
+                
+async def text_to_speech(request: TranscriptionRequest):
+    if USE_CELERY:
+        # Celery task processing as before
+        task_id = local_inference_tts.s(
+            tts_args={'args': request.model_dump()}).apply_async()
+        return {"task_id": task_id.id, "status": "queued"}
+    else:
+        # Task queuing and processing without Celery
+        try:
+            task_id = str(uuid.uuid4())
+            task = Task(task_id=task_id, request=request)
+            tasks[task_id] = task
+            future = asyncio.get_event_loop().create_future()
+            await fifo_queue.put((task_id, future))
+            return {"task_id": task_id, "status": task.state}
+        except Exception as e:
+            raise HTTPException(status_code=500, detail=str(e))
+            
 def register_routes(app: FastAPI):  
     @app.get("/", response_class=HTMLResponse)
     async def home():
@@ -94,25 +113,8 @@ def register_routes(app: FastAPI):
             return JSONResponse(content={"voices": os.listdir(BUILTIN_VOICES_DIR)})
         
     @app.post("/tts", dependencies=[Depends(get_current_user)])
-    async def text_to_speech(request: TranscriptionRequest):
-        if USE_CELERY:
-            # Celery task processing as before
-            task_id = local_inference_tts.s(
-                tts_args={'args': request.model_dump()}).apply_async()
-            return {"task_id": task_id.id, "status": "queued"}
-        else:
-            # Task queuing and processing without Celery
-            try:
-                task_id = str(uuid.uuid4())
-                task = Task(task_id=task_id, request=request)
-                tasks[task_id] = Task(task_id=task_id, request=request)
-                future = asyncio.get_event_loop().create_future()
-                await fifo_queue.put((task_id, (task, future)))
-
-                return {
-                    "task_id": task_id, "status": task.state}
-            except Exception as e:
-                raise HTTPException(status_code=500, detail=str(e))
+    async def tts(request: TranscriptionRequest):
+        return await text_to_speech(request)
         
     @app.get("/queue-status", dependencies=[Depends(get_current_user)])
     async def queue_status():
@@ -169,14 +171,12 @@ def register_routes(app: FastAPI):
         try:
             if USE_CELERY:
                 task = await check_task_status(task_id)
-                audio_content = task.result
-                if not isinstance(audio_content, bytes):
-                    raise HTTPException(status_code=500, detail="Invalid audio content received")
-                return StreamingResponse(io.BytesIO(audio_content), media_type="audio/wav")
             else:
                 task = await check_task_status(task_id, tasks)
-                return StreamingResponse(
-                    io.BytesIO(task.result), media_type="audio/wav")
+            audio_content = task.result
+            if not isinstance(audio_content, bytes):
+                raise HTTPException(status_code=500, detail=f"Invalid audio content received, got type: {str(type(audio_content))}")
+            return StreamingResponse(io.BytesIO(audio_content), media_type="audio/wav")
         except RetryError as e:
             raise HTTPException(status_code=408, detail=f"Task timed out: {e}")
         except Exception as e:

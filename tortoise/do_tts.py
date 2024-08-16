@@ -45,7 +45,9 @@ def infer_voice(
     ) -> io.BytesIO:
     selected_voices = args.voice.split(',')
     audio_buffer = io.BytesIO()
-
+    if args.output_path:
+        Path(args.output_path).mkdir(
+            parents=True, exist_ok=True)
     for k, selected_voice in tqdm(enumerate(selected_voices), desc="generating using selected voice"):
         if '&' in selected_voice:
             voice_sel = selected_voice.split('&')
