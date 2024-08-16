@@ -15,6 +15,6 @@ class TranscriptionRequest(BaseModel):
     candidates: int = 1
     seed: Optional[int] = None
     cvvp_amount: float = 0.0
-    output_path: str = "./data/results"
+    output_path: Optional[str] = None
     preset: str = "ultra_fast"
     produce_debug_state: bool = True

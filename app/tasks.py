@@ -24,25 +24,21 @@ def get_tts():
         tts_instance = _initialized_tts(TTSInitArgs())  # Replace with actual initialization logic
     return tts_instance
 
+def _process_tts_inference(tts_args: dict):
+    # Unpack the args and process the TTS task
+    tts_args = TranscriptionRequest(**tts_args.get('args'))
+    logger.info(f"TTS Inference input args: {tts_args}")
+    return infer_voice(
+        get_tts(), SimpleNamespace(**tts_args.model_dump())
+    )
+
 if USE_CELERY:
     @celery_app.task(bind=True)
     def local_inference_tts(self, tts_args: dict):
-        # Unpack the args and process the TTS task using Celery
-        tts_args = TranscriptionRequest(**tts_args.get('args'))
-        logger.info(f"TTS Inference input args: {tts_args}")
-        audio_out = infer_voice(
-            get_tts(), SimpleNamespace(**tts_args.model_dump())
-        )
-        return audio_out
+        return _process_tts_inference(tts_args)
 else:
     def local_inference_tts(tts_args: dict):
-        # Unpack the args and process the TTS task synchronously
-        tts_args = TranscriptionRequest(**tts_args.get('args'))
-        logger.info(f"TTS Inference input args: {tts_args}")
-        audio_out = infer_voice(
-            get_tts(), SimpleNamespace(**tts_args.model_dump())
-        )
-        return audio_out
+        return _process_tts_inference(tts_args)
 
 @retry(stop=stop_after_delay(TASK_TIMEOUT), wait=wait_fixed(5), reraise=True)
 async def check_task_status(task_id: str, tasks={}):
@@ -57,7 +53,7 @@ async def check_task_status(task_id: str, tasks={}):
         details = (task.info or 'Unknown error') if USE_CELERY else task.error
         raise HTTPException(status_code=500, detail=f"Task failed: {details}")
     if task.state != Task.COMPLETED:
-        raise Exception("Task not completed yet")  # Raise an exception to trigger a retry
+        raise Exception("Task not completed yet")
     # return task
     return task 
     

@@ -174,9 +174,13 @@ def register_routes(app: FastAPI):
             else:
                 task = await check_task_status(task_id, tasks)
             audio_content = task.result
-            if not isinstance(audio_content, bytes):
+            if not isinstance(audio_content, (bytes , io.BytesIO)):
                 raise HTTPException(status_code=500, detail=f"Invalid audio content received, got type: {str(type(audio_content))}")
-            return StreamingResponse(io.BytesIO(audio_content), media_type="audio/wav")
+                # If audio_content is bytes, wrap it in BytesIO
+            if isinstance(audio_content, bytes):
+                audio_content = io.BytesIO(audio_content)
+            logger.info(f"Valid audio content received, size: {audio_content.getbuffer().nbytes} bytes")
+            return StreamingResponse(audio_content, media_type="audio/wav")
         except RetryError as e:
             raise HTTPException(status_code=408, detail=f"Task timed out: {e}")
         except Exception as e:

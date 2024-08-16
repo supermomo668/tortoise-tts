@@ -34,11 +34,9 @@ def _initialized_tts(args) -> TextToSpeech:
 
 @lru_cache(maxsize=None)
 def load_voices_cached(voices_tuple):
-    voices = list(voices_tuple)  
+    voices = list(voices_tuple)
     # Convert tuple back to list for original function
-    
     return load_voices(voices_tuple)
-
 
 def infer_voice(
     tts: TextToSpeech, args: argparse.Namespace
@@ -63,25 +61,15 @@ def infer_voice(
             preset=args.preset, use_deterministic_seed=args.seed, return_deterministic_state=True, cvvp_amount=args.cvvp_amount
         )
         logger.info(f"Generating voice {selected_voice} with {args.candidates} candidates")
-        if isinstance(gen, list):
-            logger.info("Saving audio files from list")
-            for j, g in enumerate(gen):
-                torchaudio.save(
-                    audio_buffer, g.squeeze(0).cpu(), 24000, format="wav"
-                )
-                if args.output_path:
-                    output_filename = f'{selected_voice}_{k}_{j}.wav'
-                    full_output_path = os.path.join(
-                        args.output_path, output_filename)
-                    torchaudio.save(
-                        full_output_path, g.squeeze(0).cpu(), 24000, format="wav"
-                    )
-        else:
+        # Ensure gen is a list
+        gen_list = gen if isinstance(gen, list) else [gen]
+        # Save each generated audio
+        for j, g in enumerate(gen_list):
+            torchaudio.save(audio_buffer, g.squeeze(0).cpu(), 24000, format="wav")
             if args.output_path:
-                logger.info("Saving audio file.")
-                torchaudio.save(
-                    Path(args.output_path) / f'{selected_voice}_{k}.wav', gen.squeeze(0).cpu(), 24000, format="wav"
-                )
+                logger.info(f"Saving voice {selected_voice} with {args.candidates} candidates to {args.output_path}")
+                output_filename = f'{selected_voice}_{k}_{j}.wav'
+                torchaudio.save(os.path.join(args.output_path, output_filename), g.squeeze(0).cpu(), 24000, format="wav")
 
         if args.produce_debug_state:
             logger.info("Saving debug state.")
