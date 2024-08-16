@@ -22,7 +22,7 @@ sudo apt-get install libavutil-dev
 ```
 which may require setting up sym link:
 ```
-sudo ln -s /usr/lib/x86_64-linux-gnu/libavutil.so.56 /usr/lib/x86_64-linux-gnu/libavutil.so.57
+sudo ln -s /usr/lib/x86_64-linux-gnu/libavutil.so.56 /usr/lib/x86_64-linux-gnu/libavutil.so.57s
 export LD_LIBRARY_PATH=/usr/local/lib:$LD_LIBRARY_PATH
 ```
 ## Hugging Face space
