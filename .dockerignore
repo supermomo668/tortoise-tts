@@ -1,0 +1,5 @@
+*.env
+*.github
+*.pytest_cache
+*.vscode
+*_pycache

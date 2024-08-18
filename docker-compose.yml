@@ -2,16 +2,35 @@ version: '3.8'
 
 services:
   fastapi:
-    build: .
-    command: uvicorn app.main:app --host 0.0.0.0 --port ${FASTAPI_PORT:-42110}
-    volumes:
-      - .:/code
+    build:
+      context: .
+      dockerfile: Dockerfile.app
+    command: --host 0.0.0.0 --port 42110
     ports:
       - "${FASTAPI_PORT:-42110}:${FASTAPI_PORT:-42110}"
-    depends_on:
-      - redis
+    environment:
+      - PYTHONUNBUFFERED=1
     env_file:
       - .env
+    depends_on:
+      - redis
+
+  celery_worker:
+    build:
+      context: .
+      dockerfile: Dockerfile.app
+    entrypoint: ["/app/scripts/tts_celery-entrypoint.sh"]
+    command: worker --loglevel=${CELERY_LOGLEVEL:-info} --pool=${CELERY_POOL:-solo}
+    environment:
+      - C_FORCE_ROOT=true  # Use with caution, enables root user in Celery.
+      - CELERY_BROKER_URL=redis://redis:${REDIS_PORT}/0
+      - CELERY_RESULT_BACKEND=redis://redis:${REDIS_PORT}/0
+      - CELERY_CONCURRENCY=${CELERY_CONCURRENCY}
+    env_file:
+      - .env
+    depends_on:
+      - redis
+      - fastapi
 
   redis:
     image: "redis:alpine"
@@ -20,21 +39,6 @@ services:
     env_file:
       - .env
       
-  celery_worker:
-    build: .
-    command: celery -A app.tasks worker --loglevel=${CELERY_LOGLEVEL:-info} --pool=${CELERY_POOL:-solo}
-    volumes:
-      - .:/code
-    depends_on:
-      - redis
-    environment:
-      - C_FORCE_ROOT=true  # Use with caution, enables root user in Celery.
-      - CELERY_BROKER_URL=redis://redis:${REDIS_PORT}/0
-      - CELERY_RESULT_BACKEND=redis://redis:${REDIS_PORT}/0
-      - CELERY_CONCURRENCY=${CELERY_CONCURRENCY}
-    env_file:
-      - .env
-
 networks:
   default:
     driver: bridge

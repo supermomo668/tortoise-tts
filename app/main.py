@@ -5,14 +5,17 @@ from app.logger import log_requests, http_exception_handler, validation_exceptio
 
 
 load_envar = dotenv.load_dotenv()
-assert load_envar and os.getenv("DEFAULT_USERNAME"), "Missing environment variables at .env"
+assert os.getenv("DEFAULT_USERNAME"), "Missing environment variables at .env"
 
 app = create_app()
 # Register middleware and exception handlers
 app.middleware("http")(log_requests)
-app.add_exception_handler(StarletteHTTPException, http_exception_handler)
-app.add_exception_handler(RequestValidationError, validation_exception_handler)
-app.add_exception_handler(Exception, generic_exception_handler)
+app.add_exception_handler(
+  StarletteHTTPException, http_exception_handler)
+app.add_exception_handler(
+  RequestValidationError, validation_exception_handler)
+app.add_exception_handler(
+  Exception, generic_exception_handler)
 
 if __name__ == "__main__":
   import uvicorn
