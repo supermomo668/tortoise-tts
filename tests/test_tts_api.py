@@ -10,7 +10,6 @@ sys.path.insert(0, os.path.abspath(os.path.join(os.path.dirname(__file__), '..',
 
 # load environment variables
 load_envvar = dotenv.load_dotenv('tests/.env', override=True)
-assert load_envvar and os.getenv("TESTING").lower()=="true", "Missing environment variables"
 
 from app.main import app
 client = TestClient(app)

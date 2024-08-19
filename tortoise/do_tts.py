@@ -1,12 +1,15 @@
 import argparse
-from functools import lru_cache
+import io
+from pathlib import Path
+import yaml
+
 import logging
 import logging.config
 import os, sys
 from tqdm import tqdm
 
+from functools import lru_cache
 import torch
-import yaml
 import torchaudio
 
 # Add the root directory of the repo to sys.path
@@ -19,47 +22,64 @@ from tortoise.utils.audio import load_voices
 # Load logging configuration
 logger = logging.getLogger(__name__)
 
-def _initialized_tts(args):
+def _initialized_tts(args) -> TextToSpeech:
     tts = TextToSpeech(
-        models_dir=args.model_dir, autoregressive_batch_size=args.autoregressive_batch_size, use_deepspeed=args.use_deepspeed, kv_cache=args.kv_cache, 
-        half=args.half)
+        models_dir=args.model_dir, 
+        autoregressive_batch_size=args.autoregressive_batch_size, 
+        use_deepspeed=args.use_deepspeed, 
+        kv_cache=args.kv_cache, 
+        half=args.half
+    )
     return tts
 
 @lru_cache(maxsize=None)
 def load_voices_cached(voices_tuple):
-    voices = list(voices_tuple)  # Convert tuple back to list for original function
+    voices = list(voices_tuple)
+    # Convert tuple back to list for original function
     return load_voices(voices_tuple)
 
-
-def infer_voice(tts: TextToSpeech, args: argparse.Namespace):
+def infer_voice(
+    tts: TextToSpeech, args: argparse.Namespace
+    ) -> io.BytesIO:
     selected_voices = args.voice.split(',')
+    audio_buffer = io.BytesIO()
+    if args.output_path:
+        Path(args.output_path).mkdir(
+            parents=True, exist_ok=True)
     for k, selected_voice in tqdm(enumerate(selected_voices), desc="generating using selected voice"):
         if '&' in selected_voice:
             voice_sel = selected_voice.split('&')
         else:
             voice_sel = [selected_voice]
         # Convert list to tuple to make it hashable for caching
+        logger.info("loading voices")
         voice_samples, conditioning_latents = load_voices_cached(tuple(voice_sel))
-
+        logger.info("generator and latent states")
         gen, dbg_state = tts.tts_with_preset(
             args.text, k=args.candidates, voice_samples=voice_samples, 
             conditioning_latents=conditioning_latents,
             preset=args.preset, use_deterministic_seed=args.seed, return_deterministic_state=True, cvvp_amount=args.cvvp_amount
         )
-        if isinstance(gen, list):
-            for j, g in enumerate(gen):
-                output_path = os.path.join(args.output_path, f'{selected_voice}_{k}_{j}.wav')
-                torchaudio.save(
-                    output_path, g.squeeze(0).cpu(), 24000
-                )
-        else:
-            output_path = os.path.join(args.output_path, f'{selected_voice}_{k}.wav')
-            torchaudio.save(output_path, gen.squeeze(0).cpu(), 24000)
-        print(f"Audio saved to {args.output_path} as {selected_voice}_{k}.wav")
+        logger.info(f"Generating voice {selected_voice} with {args.candidates} candidates")
+        # Ensure gen is a list
+        gen_list = gen if isinstance(gen, list) else [gen]
+        # Save each generated audio
+        for j, g in enumerate(gen_list):
+            torchaudio.save(audio_buffer, g.squeeze(0).cpu(), 24000, format="wav")
+            if args.output_path:
+                logger.info(f"Saving voice {selected_voice} with {args.candidates} candidates to {args.output_path}")
+                output_filename = f'{selected_voice}_{k}_{j}.wav'
+                torchaudio.save(os.path.join(args.output_path, output_filename), g.squeeze(0).cpu(), 24000, format="wav")
+
         if args.produce_debug_state:
+            logger.info("Saving debug state.")
             os.makedirs('debug_states', exist_ok=True)
-            torch.save(dbg_state, f'debug_states/do_tts_debug_{selected_voice}.pth')
-        return output_path
+            torch.save(
+                dbg_state, f'debug_states/do_tts_debug_{selected_voice}.pth')
+    # Seek to the start of the BytesIO object
+    logger.info("Completed voice generation")
+    audio_buffer.seek(0)
+    return audio_buffer
     
 def main(args):
     if torch.backends.mps.is_available():
