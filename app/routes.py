@@ -50,9 +50,12 @@ if not USE_CELERY:
 async def text_to_speech(request: TranscriptionRequest):
     if USE_CELERY:
         # Celery task processing as before
-        task_id = local_inference_tts.s(
-            tts_args={'args': request.model_dump()}).apply_async()
-        return {"task_id": task_id.id, "status": "queued"}
+        try:
+            task_id = local_inference_tts.s(
+                tts_args={'args': request.model_dump()}).apply_async()
+            return {"task_id": task_id.id, "status": "queued"}
+        except Exception as e:
+            raise HTTPException(status_code=500, detail=f"Task submission failed: {str(e)}")
     else:
         # Task queuing and processing without Celery
         try:
@@ -63,7 +66,8 @@ async def text_to_speech(request: TranscriptionRequest):
             await fifo_queue.put((task_id, future))
             return {"task_id": task_id, "status": task.state}
         except Exception as e:
-            raise HTTPException(status_code=500, detail=str(e))
+            task.error = str(e)
+            raise HTTPException(status_code=500, detail=f"Task submission failed: {str(e)}")
             
 def register_routes(app: FastAPI):  
     @app.get("/", response_class=HTMLResponse)
@@ -146,11 +150,18 @@ def register_routes(app: FastAPI):
     async def task_status(task_id: str):
         if USE_CELERY:
             task_result = AsyncResult(task_id, app=celery_app)
+            if task_result.failed():
+                error_msg = task_result.traceback or str(task_result.result)
+                logger.error(f"Task {task_id} failed with error: {error_msg}")
+                return {"task_id": task_id, "status": "failed", "error": error_msg}
             return {"task_id": task_id, "status": task_result.state}
         else:
             task = tasks.get(task_id)
             if not task:
                 raise HTTPException(status_code=404, detail="Task not found")
+            if task.state == "failed":
+                logger.error(f"Task {task_id} failed with error: {task.error}")
+                return {"task_id": task_id, "status": "failed", "error": task.error}
             return {"task_id": task_id, "status": task.state, "error": task.error}
 
     @app.get("/task-result/{task_id}", dependencies=[Depends(get_current_user)])

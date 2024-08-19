@@ -18,7 +18,16 @@ with
 ```
 docker compose up
 ```
-
+* Notes:
+To maintain application integrity, ensure the celery-redis environment variables are suitable:
+```
+# Redis configuration for local
+CELERY_BROKER_URL=redis://localhost:6379/0
+CELERY_RESULT_BACKEND=redis://localhost:6379/0
+# for docker compose
+CELERY_BROKER_URL=redis://redis:6379/0
+CELERY_RESULT_BACKEND=redis://redis:6379/0
+```
 ## System pre-req (local)
 ```
 sudo apt-get update
