@@ -1,13 +1,17 @@
-FROM nvidia/cuda:12.2.0-base-ubuntu22.04 AS base
+FROM nvidia/cuda:11.8.0-base-ubuntu22.04 AS base
 
 # Copy application code to /app
-COPY . /app
+COPY tortoise /app/tortoise/
+COPY app /app/app/
+COPY scripts /app/scripts/
+
+# Copy other necessary files
+COPY requirements.txt setup.py README.md setup.cfg /app/
 
 # Install necessary packages and clean up
 RUN apt-get update && \
     apt-get install -y --no-install-recommends \
-    wget \
-    git \
+    wget git \
     && apt-get clean && rm -rf /var/lib/apt/lists/*
 
 # Set environment variables
@@ -41,7 +45,7 @@ RUN conda create --name tortoise python=3.9 numba inflect -y && \
 # Set conda environment to be activated by default in future RUN instructions
 RUN echo "conda activate tortoise" >> ~/.bashrc
 
-FROM conda_base AS runner
+FROM conda_base AS app_runner
 
 # Install the application
 WORKDIR /app
@@ -51,7 +55,7 @@ RUN bash -c "source ${CONDA_DIR}/etc/profile.d/conda.sh && conda activate tortoi
 RUN bash -c "source ${CONDA_DIR}/etc/profile.d/conda.sh && conda activate tortoise && pip install -r requirements.txt"
 
 # Default entrypoint
-RUN chmod +x /app/scripts/tts_app-entrypoint.sh
+RUN chmod +x scripts/*.sh
 ENTRYPOINT ["/app/scripts/tts_app-entrypoint.sh"]
 
 CMD ["--host", "0.0.0.0", "--port", "8000"]

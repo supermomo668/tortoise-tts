@@ -1,7 +1,8 @@
 import os
 import random
+import uuid
 from time import time
-# from urllib import request
+from urllib import request
 
 import torch
 import torch.nn.functional as F
@@ -40,14 +41,10 @@ MODELS = {
 def get_model_path(model_name, models_dir=MODELS_DIR):
     """
     Get path to given model, download it if it doesn't exist.
-    Uses the cache provided by HuggingFace's hf_hub_download.
     """
     if model_name not in MODELS:
         raise ValueError(f'Model {model_name} not found in available models.')
-    # hf_hub_download will automatically check the cache
-    model_path = hf_hub_download(
-        repo_id="Manmay/tortoise-tts", filename=model_name, cache_dir=models_dir
-    )
+    model_path = hf_hub_download(repo_id="Manmay/tortoise-tts", filename=model_name, cache_dir=models_dir)
     return model_path
 
 
