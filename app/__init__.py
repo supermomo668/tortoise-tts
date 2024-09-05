@@ -2,9 +2,12 @@
 from fastapi import FastAPI
 
 from app.lifespan import lifespan
-from app.routes import register_routes
+from app.routes import auth, task, tts
 
 def create_app() -> FastAPI:
     app = FastAPI(lifespan=lifespan)
-    register_routes(app)
+    app.include_router(auth.router)
+    app.include_router(task.router)
+    app.include_router(tts.router)
+    # register_routes(app)
     return app

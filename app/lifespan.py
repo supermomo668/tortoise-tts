@@ -8,7 +8,7 @@ from app.logger import logger
 
 # Import the Celery task
 from app.constants import IS_TESTING, USE_CELERY
-from app.routes import text_to_speech
+from app.services.tts import text_to_speech
 
 @asynccontextmanager
 async def lifespan(app: FastAPI):
@@ -24,7 +24,7 @@ async def lifespan(app: FastAPI):
             )
             if not USE_CELERY:
                 logger.info(f"Task added to the non-celery queue")
-                from app.routes import process_requests, fifo_queue, executor
+                from app.services.task import process_requests, fifo_queue, executor
                 task = asyncio.create_task(process_requests())
             response = await text_to_speech(request)
             if response:

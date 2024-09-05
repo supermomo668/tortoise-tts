@@ -3,7 +3,7 @@ from celery import Celery
 
 import torch
 
-torch.multiprocessing.set_start_method('spawn')
+# torch.multiprocessing.set_start_method('spawn')
 
 # Define the Celery app
 celery_app = Celery('app')
