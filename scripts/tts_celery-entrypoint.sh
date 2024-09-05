@@ -4,4 +4,4 @@ source /root/miniconda/etc/profile.d/conda.sh
 conda activate tortoise
 
 # Execute the Python script with passed arguments
-celery -A app.tasks "$@"
+celery -A app.services.task "$@"
