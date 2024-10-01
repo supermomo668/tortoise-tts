@@ -38,15 +38,25 @@ def verify_user(username: str, password: str):
     return False
 
 def create_access_token(data: dict, expires_delta: Optional[timedelta] = None):
+    """
+    Create a JWT token.
+    
+    :param data: The data to encode in the JWT.
+    :param expires_delta: Optional; A timedelta specifying when the token should expire.
+    :param never_expire: Optional; If set to True (default), the token will never expire unless expires_delta is provided.
+    :return: Encoded JWT token.
+    """
     to_encode = data.copy()
+    
     if expires_delta:
-        expire = datetime.now(timezone.utc) + expires_delta
-    else:
-        expire = datetime.now(timezone.utc) + timedelta(minutes=ACCESS_TOKEN_EXPIRE_MINUTES)
-    to_encode.update({"exp": expire})
+        # If 'never_expire' is False or a custom expiration is provided, set an expiry time
+        expire = datetime.now(timezone.utc) + (expires_delta or timedelta(minutes=ACCESS_TOKEN_EXPIRE_MINUTES))
+        to_encode.update({"exp": expire})
+    # Encode the JWT without the 'exp' if never_expire is True and no expires_delta
     encoded_jwt = jwt.encode(
-        to_encode, DEFAULT_SECRET_KEY, algorithm=ALGORITHM)
-    print(f"Encoded JWT: {encoded_jwt}")
+        to_encode, DEFAULT_SECRET_KEY, algorithm=ALGORITHM
+    )
+    logger.debug(f"Encoded JWT: {encoded_jwt}")
     return encoded_jwt
 
 async def get_current_user(
