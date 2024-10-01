@@ -32,6 +32,7 @@ api_key_header = APIKeyHeader(
 
 
 def verify_user(username: str, password: str):
+    
     user = os.getenv("DEFAULT_USERNAME")
     if user and secrets.compare_digest(os.getenv("DEFAULT_PASSWORD"), password):
         return True
