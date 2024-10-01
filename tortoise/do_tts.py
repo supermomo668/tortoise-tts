@@ -2,6 +2,7 @@ import argparse
 import io
 from pathlib import Path
 import yaml
+from typing import List
 
 import logging
 import logging.config
@@ -16,7 +17,7 @@ import torchaudio
 sys.path.insert(0, os.path.abspath(os.path.join(os.path.dirname(__file__), '..')))
 
 from tortoise.api import TextToSpeech, MODELS_DIR, pick_best_batch_size_for_gpu
-from tortoise.utils.audio import load_voices
+from tortoise.utils.audio import load_voices, BUILTIN_VOICES_DIR
 
 # Configure logging to print to the console
 # Load logging configuration
@@ -31,12 +32,46 @@ def _initialized_tts(args) -> TextToSpeech:
         half=args.half
     )
     return tts
+# Store the last directory count for cache invalidation
+last_dir_count = None
+
+def get_directory_count(voice_dirs: List[Path]) -> int:
+    """
+    Helper function to get the total count of directories in a list of voice directories.
+    """
+    return sum(1 for d in voice_dirs if d.is_dir() for sub in d.iterdir() if sub.is_dir())
+
+def should_invalidate_cache(voice_dirs: List[Path]) -> bool:
+    """
+    Check if the cache should be invalidated based on the number of directories.
+    """
+    global last_dir_count
+    current_count = get_directory_count(voice_dirs)
+    
+    if last_dir_count is None:
+        # Set the initial directory count
+        last_dir_count = current_count
+        return False
+    
+    if current_count != last_dir_count:
+        # Invalidate cache and update the count
+        last_dir_count = current_count
+        return True
+
+    return False
 
 @lru_cache(maxsize=None)
-def load_voices_cached(voices_tuple):
-    voices = list(voices_tuple)
-    # Convert tuple back to list for original function
-    return load_voices(voices_tuple)
+def load_voices_cached(voices_tuple, extra_voice_dirs=[]):
+    """
+    Load voices with a cache. If the directory count changes, invalidate the cache.
+    """
+    all_voice_dirs = [Path(BUILTIN_VOICES_DIR)] + [Path(d) for d in extra_voice_dirs]
+
+    # Check if the cache needs to be invalidated
+    if should_invalidate_cache(all_voice_dirs):
+        load_voices_cached.cache_clear()  # Clears the cache if directories change
+
+    return load_voices(voices_tuple, extra_voice_dirs)
 
 def infer_voice(
     tts: TextToSpeech, args: argparse.Namespace
