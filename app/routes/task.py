@@ -49,7 +49,7 @@ async def queue_status():
             "queue_length": fifo_queue.qsize(), "tasks": tasks
         }
 
-@router.get("/task-status/{task_id}", dependencies=[Depends(get_current_user)])
+@router.get("/status/{task_id}", dependencies=[Depends(get_current_user)])
 async def task_status(task_id: str):
     if USE_CELERY:
         task_result = AsyncResult(task_id, app=celery_app)
@@ -72,7 +72,7 @@ async def task_status(task_id: str):
           "error": task.error
         }
 
-@router.get("/task-result/{task_id}", dependencies=[Depends(get_current_user)])
+@router.get("/result/{task_id}", dependencies=[Depends(get_current_user)])
 async def task_result(task_id: str, request: Request):
     """
     Waits for the task to complete and returns the result file if successful.
